@@ -3,6 +3,14 @@
 ## Approach
 We searched all four Sober binaries (`sober`, `sober_services`, `libloader.so`, `libbadcpu.so`) for JSON key references, config strings, and UI toggle identifiers.
 
+## Runtime Analysis (Headless execution attempt)
+
+Attempted to run `sober_services` under Xvfb with a fake `/.flatpak-info`.
+It loaded all GTK4/WebKit/libadwaita libraries successfully but exited with code 1 before showing any window.
+The `/.flatpak-info` check passes; the failure occurs later in initialization (likely requires a Wayland/X11 session or GSettings schema it cannot find in the bare environment).
+
+Strace shows library loading sequence: libwebkitgtk-6.0, libgtk-4, libadwaita-1, libjavascriptcoregtk-6.0, libsecret-1 — confirming the UI stack matches our static analysis.
+
 ## Confirmed Config Keys (Found in Binary Strings)
 
 ### From `sober_services` (GTK4/libadwaita UI strings)
@@ -13,13 +21,11 @@ We searched all four Sober binaries (`sober`, `sober_services`, `libloader.so`, 
 | `enable-developer-extras` | boolean | `strings_sober_services.txt:1518` | Developer mode toggle; probably enables debug logging or advanced features |
 | `enable_auto_downloads` | boolean | `strings_sober_services.txt:1519` | APK auto-download; controls whether Sober fetches Roblox APK automatically vs requiring manual selection |
 
-### From `sober_services` UI Builder IDs
-| Key / ID | Widget Type | File:Line | Note |
-|----------|-------------|-----------|------|
-| `settings-onboard-page` | AdwNavigationPage | strings:1916 | Onboarding settings page |
-| `settings-continue-button` | GtkButton | strings:1915 | Onboarding continue action |
-| `--server` | CLI flag / argument | strings:130 | Command-line option; likely `- -server <region>` |
-| `--switch-H1` | CLI flag | strings:130 | Related to config-sH1 switch |
+### CLI Arguments
+| Flag | Context |
+|------|---------|
+| `--server` | `strings_sober_services.txt:130` |
+| `--switch-H1` | `strings_sober_services.txt:130` (related to config-sH1) |
 
 ### From `sober` main binary
 No explicit config key strings were found in the `sober` runtime binary. Configuration appears to be passed via IPC or environment variables rather than parsed directly from a JSON file by the Rust core.
@@ -27,33 +33,33 @@ No explicit config key strings were found in the `sober` runtime binary. Configu
 ### From `libloader.so`
 No config strings found. The loader uses hardcoded paths (`/app/bin/sober_services`) and environment-based sandboxing.
 
-## Inferred / External (from release notes, not binary strings)
+## Inferred / External (from release notes, NOT in binary strings)
 
 | Option | Inferred Type | Evidence |
 |--------|--------------|----------|
-| `use_libsecret` | boolean | Binary links `libsecret-1.so.0`; API strings found in imports. UI toggle in settings would control secure credential storage vs plaintext |
-| `texture_quality` | enum/string | Release notes mention texture customization; likely values: `low`, `medium`, `high`, `ultra` |
-| `quality_level` | enum/number | Release notes; likely `1-5` or `low/medium/high` affecting draw distance and effects |
-| `discord_activity` / `discord_rpc` | boolean | Release notes mention Discord Activity/RPC integration |
-| `close_on_experience_leave` | boolean | Release notes; close Sober when exiting a Roblox experience vs keeping open |
-| `webview_enabled` | boolean | Release notes; enable/disable WebKit WebView for login (fallback to external browser?) |
+| `use_libsecret` | boolean | Binary links `libsecret-1.so.0`; UI strings reference `soup_cookie_new`, `soup_cookie_set_secure`. Not found as a literal string key |
+| `texture_quality` | enum/string | Release notes mention texture customization; **absent from binary strings** |
+| `quality_level` | enum/number | Release notes; **absent from binary strings** |
+| `discord_activity` / `discord_rpc` | boolean | Release notes mention Discord Activity/RPC integration; **absent from binary strings** |
+| `close_on_experience_leave` | boolean | Release notes; **absent from binary strings** |
+| `webview_enabled` | boolean | Release notes; **absent from binary strings** |
 
-## JSON Schema (Partial)
+## Negative Findings
+- **None of the release-note config keys appear as plain strings in the binaries**
+- This suggests they are either:
+  1. Dynamically loaded from an external config server or protobuf definition
+  2. Obfuscated or generated at runtime from constant fragments
+  3. Compile-time stripped by Rust LTO (unlikely for C++ UI strings)
+  4. Part of a protobuf/flatbuffers schema where field names are not embedded
 
-Based on confirmed keys and UI structure, the config is likely a flat JSON object:
+## JSON Schema (Confirmed Only)
 
 ```json
 {
     "enable_auto_downloads": true,
     "enable_developer_extras": false,
-    "use_libsecret": true,
-    "texture_quality": "high",
-    "quality_level": 3,
-    "discord_activity": true,
-    "discord_rpc": true,
-    "close_on_experience_leave": false,
-    "webview_enabled": true,
-    "server_region": "auto"
+    "config_sH1": null,
+    "config_switch_prefix": "config-switch-"
 }
 ```
 
@@ -74,7 +80,10 @@ Based on confirmed keys and UI structure, the config is likely a flat JSON objec
 
 ## Recommendation
 
-To fully document the schema, attach a debugger to `sober_services` while toggling switches and watch for JSON write calls, or inspect the actual config file generated by a live Flatpak install.
+To fully document the schema:
+1. Install Sober via Flatpak on a desktop system with a display
+2. Toggle all settings switches and observe JSON file writes in `~/.var/app/org.vinegarhq.Sober/`
+3. Alternatively, attach gdb to `sober_services`, set breakpoint on `nlohmann::json::operator[]`, and read keys from stack frames
 
 ---
-*Report based on static string analysis of Sober binaries. Confirmed keys are from actual binary strings; inferred keys are from external release notes.*
+*Report based on static string analysis + headless runtime execution attempt of Sober binaries. Confirmed keys are from actual binary strings; inferred keys are from external release notes.*
