@@ -70,6 +70,19 @@ Sober includes/attribution for these open source libraries:
 - **libxml2** (MIT) Daniel Veillard
 - **Android Open Source Project** (Apache 2.0) ChristopherHX / MCMrARM portions
 
+## Implemented Components
+
+### libbadcpu.so - x86-64 CPU Feature Emulator (Issue #8)
+
+Clean room reimplementation of Sober's CPU feature emulator. This shared library:
+
+1. Installs a `SIGILL` signal handler at load time (`__attribute__((constructor))`)
+2. Queries CPU features via `CPUID` at startup
+3. When the host program hits an instruction the CPU doesn't support, the handler catches `SIGILL`, decodes the faulting instruction, emulates it in software, and modifies `ucontext_t` registers to advance RIP past the instruction
+4. Emits a fatal error for unrecognized instructions or unsupported CPUs (requires SSE4.1 minimum)
+
+**Supported emulated instructions:** POPCNT, MOVBE, LZCNT, TZCNT, ANDN, BLSI, BLSMSK, BLSR
+
 ## Repository Structure
 
 ```
@@ -79,16 +92,32 @@ sober-oss/
   SECURITY_AUDIT.md            Security analysis findings
   BINARY_ANALYSIS.md           Per binary analysis notes
   LICENSE                      Project license (MIT)
+  meson.build                  Build system (top-level)
+  include/
+    badcpu.h                   Public API header for libbadcpu
+  src/
+    libbadcpu/
+      badcpu.cpp               Library entry point
+      cpuid.cpp                CPUID feature detection
+      decoder.cpp              x86-64 instruction decoder
+      emulator.cpp             Per-instruction emulation logic
+      signal_handler.cpp       SIGILL handler installation/management
+      test/
+        test_badcpu.cpp        Unit tests
+      meson.build              Build definition
   decompiled/
-    sober.c                    Ghidra decompilation of main runtime
-    sober_services.c           Ghidra decompilation of GUI services
-    libloader.c                Ghidra decompilation of process loader
-    libbadcpu.c                Ghidra decompilation of CPU emulator
+    sober/                    Ghidra decompilation of main runtime
+    sober_services/           Ghidra decompilation of GUI services
+    libloader/                Ghidra decompilation of process loader
+    libbadcpu/                Ghidra decompilation of CPU emulator
   analysis/
-    strings_analysis.txt        Comprehensive strings extraction
-    imports_exports.txt         Dynamic symbol analysis
-    sections_segments.txt       Binary layout analysis
-    rust_types.txt              Recovered Rust type information
+    libbadcpu_decompilation.md  Detailed libbadcpu analysis report
+    libloader_decompilation.md  Detailed libloader analysis report
+    sober_services_decompilation.md  Detailed sober_services analysis report
+    *_strings_sorted.txt        Per-binary sorted strings
+    imports_*.txt              Per-binary import analysis
+  docs/
+    config_schema.md           Sober config.json schema documentation
   scripts/
     extract_strings.sh          Binary string extraction
     ghidra_decompile.py        Automated Ghidra headless decompile
@@ -100,9 +129,37 @@ This reverse engineering was performed under the fair use / interoperability pro
 
 The decompiled code in this repository is pseudocode produced by Ghidra, not the original source code. It is provided for educational and security research purposes only.
 
+The `src/` directory contains clean room implementations written from scratch based on the documented architecture and analysis. No decompiled pseudocode was copied into the implementation.
+
 ## Building from Source
 
-This repo does not contain working source code that can be compiled. It contains decompiled pseudocode and documentation. To actually build Sober from source, one would need to write new implementations based on the documented architecture and decompiled logic.
+### Prerequisites
+
+- Meson build system (`pip install meson`)
+- Ninja build (`apt install ninja-build`)
+- GCC or Clang with C++20 support
+- Linux x86-64 (uses `cpuid.h` and `ucontext.h`)
+
+### Building libbadcpu.so (Issue #8)
+
+```bash
+meson setup build
+ninja -C build
+```
+
+This produces `build/src/libbadcpu/libbadcpu.so`.
+
+### Running Tests
+
+```bash
+meson test -C build
+```
+
+### Installing
+
+```bash
+meson install -C build --destdir=/path/to/install
+```
 
 ## Original Project
 

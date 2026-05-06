@@ -1,2 +1,4 @@
 output/
 *.tar.zst
+build/
+ subprojects/
