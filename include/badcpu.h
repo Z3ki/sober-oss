@@ -66,6 +66,10 @@ struct DecodedInstruction {
     bool has_66 = false;
     bool has_f2 = false;
     bool has_f3 = false;
+    uint8_t rex = 0;
+    bool has_rex = false;
+    uint8_t vex_vvvv = 0;
+    bool vex_w = false;
 };
 
 enum class EmulationResult : uint8_t {
