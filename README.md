@@ -1,3 +1,5 @@
+
+
 # Sober Reverse Engineering & Open Source Documentation
 
 Reverse engineering project for [Sober](https://sober.vinegarhq.org) by VinegarHQ. Sober is a proprietary Linux runtime that runs the Roblox Android APK natively on x86 64 Linux via binary translation. The developers chose to close source it to reduce abuse potential (which could get Roblox to block them again).
@@ -120,7 +122,7 @@ sober-oss/
     config_schema.md           Sober config.json schema documentation
   scripts/
     extract_strings.sh          Binary string extraction
-    ghidra_decompile.py        Automated Ghidra headless decompile
+    ExportAllDecompiled.java    Automated Ghidra headless decompile
 ```
 
 ## Legal Notice
@@ -138,7 +140,7 @@ The `src/` directory contains clean room implementations written from scratch ba
 - Meson build system (`pip install meson`)
 - Ninja build (`apt install ninja-build`)
 - GCC or Clang with C++20 support
-- Linux x86-64 (uses `cpuid.h` and `ucontext.h`)
+- Linux x86 64 (uses `cpuid.h` and `ucontext.h`)
 
 ### Building libbadcpu.so (Issue #8)
 
