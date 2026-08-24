@@ -113,6 +113,7 @@ sober-oss/
     libloader/                Ghidra decompilation of process loader
     libbadcpu/                Ghidra decompilation of CPU emulator
   analysis/
+    sober_decompilation.md      Detailed main sober runtime analysis report
     libbadcpu_decompilation.md  Detailed libbadcpu analysis report
     libloader_decompilation.md  Detailed libloader analysis report
     sober_services_decompilation.md  Detailed sober_services analysis report
