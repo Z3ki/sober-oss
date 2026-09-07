@@ -173,41 +173,73 @@ static EmulationResult emulate_lzcnt_tzcnt(ucontext_t* ctx,
     return EmulationResult::Success;
 }
 
+// Read the r/m operand as a value: register value for mod==3, else load from
+// the effective address at operand size. (get_rm_value returns the address for
+// memory forms, so BMI must dereference it.)
+static uint64_t rm_source_value(ucontext_t* ctx, const DecodedInstruction& inst,
+                                 bool is_64bit) {
+    if ((inst.modrm >> 6) == 3) {
+        return get_reg(ctx, inst.rm);
+    }
+    uint64_t addr = get_rm_value(ctx, inst);
+    uint64_t v = 0;
+    memcpy(&v, reinterpret_cast<void*>(addr), is_64bit ? 8 : 4);
+    return v;
+}
+
+// BMI1 (ANDN/BLSR/BLSMSK/BLSI), all VEX.LZ.0F38.W0/W1.
+// Operand size follows VEX.W only (carried in rex bit 3), not the 66 prefix.
+// ANDN F2:      dest=ModRM.reg, src1=VEX.vvvv, src2=r/m ; dest = ~src1 & src2
+// BLSR  F3 /1:  dest=VEX.vvvv, src=r/m         ; dest = src & (src-1)
+// BLSMSK F3 /2: dest=VEX.vvvv, src=r/m         ; dest = src ^ (src-1)
+// BLSI  F3 /3:  dest=VEX.vvvv, src=r/m         ; dest = src & -src
 static EmulationResult emulate_bmi(uint8_t op3, ucontext_t* ctx,
                                      const DecodedInstruction& inst) {
-    bool is_64bit = (inst.rex & 0x08) && !inst.has_66;
-    uint64_t src1 = get_reg(ctx, inst.reg);
-    uint64_t src2 = get_rm_value(ctx, inst);
+    bool is_64bit = (inst.rex & 0x08);
+    uint64_t src2 = rm_source_value(ctx, inst, is_64bit);
     uint64_t result;
+    uint8_t dest;
+    bool cf;
 
-    // BMI1 uses VEX encoding: src1 is reg (VEX.vvvv), src2 is r/m
-    switch (op3) {
-        case 0xF2: // ANDN
-            result = src1 & ~src2;
-            break;
-        case 0xF3: // BLSI
-            result = src2 & (-src2);
-            break;
-        case 0xF1: // BLSMSK
-            result = src2 ^ (src2 - 1);
-            break;
-        case 0xF4: // BLSR
-            result = src2 & (src2 - 1);
-            break;
-        default:
-            return EmulationResult::UnrecognizedInstruction;
+    if (op3 == 0xF2) {
+        uint64_t src1 = get_reg(ctx, inst.vex_vvvv);
+        result = (~src1) & src2;
+        dest = inst.reg;
+        cf = false; // ANDN clears CF
+    } else if (op3 == 0xF3) {
+        dest = inst.vex_vvvv;
+        uint8_t ext = (inst.modrm >> 3) & 0x07; // /1 /2 /3 selects the op
+        switch (ext) {
+            case 1: // BLSR
+                result = src2 & (src2 - 1);
+                cf = (src2 == 0);
+                break;
+            case 2: // BLSMSK
+                result = src2 ^ (src2 - 1);
+                cf = (src2 == 0);
+                break;
+            case 3: // BLSI
+                result = src2 & static_cast<uint64_t>(0 - src2);
+                cf = (src2 != 0);
+                break;
+            default:
+                return EmulationResult::UnrecognizedInstruction;
+        }
+    } else {
+        return EmulationResult::UnrecognizedInstruction;
     }
 
     if (!is_64bit) {
         result &= 0xFFFFFFFFu;
     }
 
-    *get_reg_ptr(ctx, inst.reg) = result;
+    *get_reg_ptr(ctx, dest) = result;
 
     uint64_t& flags = *reinterpret_cast<uint64_t*>(&ctx->uc_mcontext.gregs[REG_EFL]);
-    // BMI1 clears OF, SF, AF, PF, CF; ZF set if result==0, SF set from MSB of result
-    flags &= ~static_cast<uint64_t>(0x8D5); // clear CF, PF, AF, ZF, SF, OF
-    if (result == 0) flags |= 0x40; // ZF
+    // OF cleared, SF/ZF from result, CF per-op. AF/PF undefined, we clear them.
+    flags &= ~static_cast<uint64_t>(0x8D5); // CF, PF, AF, ZF, SF, OF
+    if (cf) flags |= 0x1;                     // CF
+    if (result == 0) flags |= 0x40;           // ZF
     if (result & (is_64bit ? (1ull << 63) : (1u << 31))) flags |= 0x80; // SF
 
     ctx->uc_mcontext.gregs[REG_RIP] += inst.len;
@@ -221,8 +253,8 @@ EmulationResult emulate_instruction(const uint8_t* ip, const CpuFeatures& featur
     if (inst.is_vex) {
         uint8_t op3 = inst.opcode[2];
         if (inst.opcode[0] == 0x0F && inst.opcode[1] == 0x38) {
-            // VEX-encoded BMI1/2 instructions in 0F38 map
-            if (op3 == 0xF2 || op3 == 0xF3 || op3 == 0xF1 || op3 == 0xF4) {
+            // BMI1 in the 0F38 map: ANDN (F2) and the BLS* group (F3 /1,/2,/3)
+            if (op3 == 0xF2 || op3 == 0xF3) {
                 return emulate_bmi(op3, ctx, inst);
             }
         }
