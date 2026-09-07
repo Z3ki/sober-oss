@@ -28,7 +28,7 @@ The service process provides:
 
 ### 2. Main Runtime (sober)
 
-**Language**: Rust (compiled with panic handlers, thread infrastructure)
+**Language**: C++ (Roblox engine core; readable dynamic symbols are C++ operator new/delete, no Rust markers present). The main code segment is encrypted and unpacked at runtime, so it can't be decompiled as shipped.
 **Binary Size**: 7.1 MB
 
 This is the core Android binary translator. It:

@@ -9,7 +9,7 @@ Attempted to run `sober_services` under Xvfb with a fake `/.flatpak-info`.
 It loaded all GTK4/WebKit/libadwaita libraries successfully but exited with code 1 before showing any window.
 The `/.flatpak-info` check passes; the failure occurs later in initialization (likely requires a Wayland/X11 session or GSettings schema it cannot find in the bare environment).
 
-Strace shows library loading sequence: libwebkitgtk-6.0, libgtk-4, libadwaita-1, libjavascriptcoregtk-6.0, libsecret-1 — confirming the UI stack matches our static analysis.
+Strace shows library loading sequence: libwebkitgtk-6.0, libgtk-4, libadwaita-1, libjavascriptcoregtk-6.0, libsecret-1, confirming the UI stack matches our static analysis.
 
 ## Confirmed Config Keys (Found in Binary Strings)
 
@@ -25,7 +25,6 @@ Strace shows library loading sequence: libwebkitgtk-6.0, libgtk-4, libadwaita-1,
 | Flag | Context |
 |------|---------|
 | `--server` | `strings_sober_services.txt:130` |
-| `--switch-H1` | `strings_sober_services.txt:130` (related to config-sH1) |
 
 ### From `sober` main binary
 No explicit config key strings were found in the `sober` runtime binary. Configuration appears to be passed via IPC or environment variables rather than parsed directly from a JSON file by the Rust core.

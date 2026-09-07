@@ -3,10 +3,11 @@
 ## sober (Main Runtime)
 
 **File**: `sober`
-**Size**: 7.1 MB
+**Size**: 7.1 MB (7.6 MB on the current 1.7.1 build)
 **Format**: ELF 64 bit LSB PIE executable, x86 64
-**Language**: Rust (confirmed by panic handler strings, Rust error types, thread naming)
+**Language**: C++ (readable dynamic symbols are the C++ ABI: `_Znwm`/`_ZdlPv`/`_ZnwmRKSt9nothrow_t` operator new/delete; there are no Rust markers in the strings at all). This is the Roblox engine core, which is C++. An earlier note here said "Rust, confirmed by panic handler strings" - there are no such panic strings in this binary, and the executable code segment is encrypted anyway (see below), so language can only be inferred from the readable dynamic symbols.
 **Stripped**: Yes (no section headers, no debug symbols)
+**Packing**: The main executable LOAD segment (~5.2 MB) is encrypted, entropy ~8.0 bits/byte. It is not decompilable as shipped; it is unpacked at runtime (libloader carries the inflate path). This is why `decompiled/sober/sober.c` only contains init/PLT stubs.
 **Build ID**: 4326c9c9a3e8c7df93715a360e853fe4c61d384a
 **RELRO**: Full
 **Stack Canary**: No
@@ -38,13 +39,10 @@ ld linux x86 64.so.2
 - glibc version info: `{"type":"deb","os":"ubuntu","name":"glibc","version":"2.42-0ubuntu3.1","architecture":"amd64"}`
 - Android compatibility strings (JNI, Dalvik related patterns)
 
-### Embedded Libraries (statically linked)
-- detex (texture decompression)
-- volk (Vulkan loader)
-- imgui (immediate mode GUI)
-- dyncall (dynamic calling convention)
-- mcl/oaknut (ARM64 assembler)
-- SDL3 subsystems (audio, video, input, haptic, gamepad)
+### Embedded Libraries
+- SDL3 subsystems - **confirmed from the binary** (SDL3 driver-manifest JSON strings in the readable rodata: `audio-libpipewire`, `wayland-vulkan`, `x11`, plus `libdecor`)
+- mimalloc - present, but as a **separate `libmimalloc.so`** (via RUNPATH `$ORIGIN/subprojects/mimalloc`), not statically baked in
+- detex, volk, imgui, dyncall, mcl/oaknut - **declared in Sober's third-party attribution, not observed here.** The code+rodata that would carry their strings is inside the encrypted segment, so there is no string evidence for them in the shipped binary either way. Do not treat these as confirmed-by-analysis.
 
 ---
 
@@ -103,7 +101,7 @@ ld-linux-x86-64.so.2
 ## libloader.so (Process Loader)
 
 **File**: `libloader.so`
-**Size**: 2.8 MB
+**Size**: 2.8 MB (note: the current 1.7.1 build measures ~4.3 MB; the 2.8 MB figure did not match any build I could pull, so double-check this against the exact version)
 **Format**: ELF 64 bit LSB shared object, x86 64
 **Language**: Rust (confirmed by panic handler strings, error types)
 **Stripped**: Yes (no section headers)
