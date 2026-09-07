@@ -52,7 +52,7 @@ DecodedInstruction decode_instruction(const uint8_t* ip) {
         }
     }
 
-    // REX prefix (0x40-0x4F) — must come after legacy prefixes, before opcode
+    // REX prefix (0x40-0x4F) must come after legacy prefixes, before opcode
     if (pos < 15 && (ip[pos] & 0xF0) == 0x40) {
         inst.rex = ip[pos];
         inst.has_rex = true;
@@ -85,10 +85,15 @@ DecodedInstruction decode_instruction(const uint8_t* ip) {
             uint8_t b2 = ip[pos++];
             vex_w = (b2 >> 7) & 1;
             vex_pp = b2 & 0x03;
+            // vvvv is stored 1s-complemented; it names src1/dest for BMI etc.
+            inst.vex_vvvv = (~(b2 >> 3)) & 0x0F;
+            inst.vex_w = vex_w;
         } else {
+            // 2-byte VEX (C5): implies 0F map, W0, X=B=1. vvvv sits in b1.
             uint8_t b1 = ip[pos++];
             vex_r = (b1 >> 7) & 1;
             vex_pp = b1 & 0x03;
+            inst.vex_vvvv = (~(b1 >> 3)) & 0x0F;
         }
 
         // VEX R/X/B/W are inverted; convert to normal REX form
@@ -143,6 +148,7 @@ DecodedInstruction decode_instruction(const uint8_t* ip) {
     } else {
         inst.opcode[0] = first_byte;
         inst.opcode_len = 1;
+        pos++; // consume the 1-byte opcode; modrm (if any) is the next byte
     }
 
     // Determine if this opcode needs ModR/M and whether it's SIMD

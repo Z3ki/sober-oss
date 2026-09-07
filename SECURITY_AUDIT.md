@@ -10,17 +10,21 @@ Sober is a proprietary Roblox on Linux runtime. The security posture is reasonab
 
 ## Findings
 
-### POSITIVE: No Hidden Telemetry
+### POSITIVE (string level): No Hidden Telemetry
 
-The binaries do not contain undisclosed telemetry endpoints, tracking pixels, or data exfiltration code beyond what is described in their privacy policy. Network connections are to:
+At the string level the binaries show no undisclosed telemetry SDKs, tracking endpoints, or exfiltration code: no google-analytics/sentry/crashpad/segment/mixpanel/amplitude/posthog/datadog markers or domains in any of the four. The only external-service reference in the readable strings is ipinfo.io (the disclosed opt-in server-location feature). Documented network use is:
 - Cloudflare (CDN for updates)
 - Roblox servers (game traffic)
 - ipinfo.io (optional server location feature, user opt in)
 - Google Play (optional APK download)
 
-### POSITIVE: No Code Obfuscation
+Caveat: this is not a full audit. `sober`'s code segment is encrypted (see below), so its actual host list is not visible in strings, and no dynamic/traffic analysis was done. So read this as "nothing suspicious in what we could see", not "the network behaviour was fully verified".
 
-While the binaries are stripped (no debug symbols), they are not obfuscated with control flow flattening, string encryption, or packing. Standard Ghidra decompilation works without issues. This suggests the developers prioritize performance over anti reverse engineering.
+### MIXED: Obfuscation
+
+Three of the four binaries (`sober_services`, `libloader.so`, `libbadcpu.so`) plus `libmimalloc.so` are only stripped (no debug symbols) and are not otherwise obfuscated: no control-flow flattening, no string encryption, no packing, and standard Ghidra decompilation works on them.
+
+The main `sober` binary is different. Its executable LOAD segment (about 5.2 MB) is **encrypted/packed**: Shannon entropy is ~8.00 bits/byte (the maximum), versus ~6.3 to 6.7 for the other three, and the segment is high-entropy noise rather than x86 code. This is almost certainly Roblox's own anti-tamper protection on the engine core, unpacked at runtime (`libloader.so` carries a deflate/inflate path). The practical effect: Ghidra cannot decompile `sober`'s main code (the committed `decompiled/sober/sober.c` is essentially empty, just init/PLT stubs full of `halt_baddata()`), and `sober`'s language and bundled libraries can't be confirmed from strings. So the earlier "no obfuscation, decompilation works without issues" statement holds for the VinegarHQ pieces but not for the Roblox engine core.
 
 ### POSITIVE: Minimal Sandbox Permissions
 
@@ -77,7 +81,7 @@ The notice.txt attributes code to ChristopherHX and MCMrARM under MIT license, p
 
 | Binary | Strip | Obfuscation | Packer | Notes |
 |---|---|---|---|---|
-| sober | Full (no section headers) | None | None | Standard Rust strip |
+| sober | Full (no section headers) | Code segment encrypted | Yes (unpacked at runtime) | C++ engine core; code seg entropy ~8.0, not decompilable as shipped |
 | sober_services | Full (no section headers) | None | None | Standard C++ strip |
 | libloader.so | Full (no sections) | None | None | Standard Rust strip |
 | libbadcpu.so | Full (no sections) | None | None | Standard Rust strip |

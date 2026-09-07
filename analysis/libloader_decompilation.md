@@ -2,7 +2,7 @@
 
 ## Binary Info
 - **File**: `libloader.so`
-- **Size**: 2.8 MB
+- **Size**: 2.8 MB (the current 1.7.1 build is ~4.3 MB; verify against the exact version)
 - **Language**: Rust (confirmed by panic strings, refcounting patterns, thread infrastructure)
 - **Format**: ELF 64-bit LSB shared object, x86-64, stripped
 - **Ghidra Coverage**: ~101 functions, ~40K lines of decompiled C pseudocode
@@ -17,7 +17,7 @@ libloader.so is a custom ELF loader and process spawner written in Rust. It is i
 Rust shared object initialization sequence:
 - `_DT_INIT @ 001168a8`: Standard ELF init
 - `_INIT_0 / _INIT_1 / _INIT_2`: Rust runtime setup, thread-local storage
-- **Runtime startup**: `FUN_00141060` / `FUN_001411b0` - Rust `std::rt::lang_start` with panic handling
+- **Runtime startup**: Rust `std::rt::lang_start` with panic handling (the specific `FUN_` addresses aren't reproduced here; they weren't present in the committed decompilation, so I've dropped the exact citations rather than guess)
 - **Constructor functions**: Multiple `FUN_00117xxx` functions that set up the loader state before `main()` equivalent runs
 
 ## Key Components

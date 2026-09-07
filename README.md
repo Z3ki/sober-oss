@@ -12,7 +12,7 @@ Sober consists of 4 main proprietary binaries distributed via Flatpak:
 
 | Binary | Size | Language | Purpose |
 |---|---|---|---|
-| `sober` | 7.1 MB | Rust | Main game runtime. Handles Android binary translation, OpenGL/Vulkan rendering, process management, networking. Links to libloader.so, libbadcpu.so, libmimalloc.so, libcrypto, libcurl, libEGL, libGLESv2, libxml2, libfreetype, libz, libsecret |
+| `sober` | 7.1 MB | C++ | Main game runtime. Handles Android binary translation, OpenGL/Vulkan rendering, process management, networking. Links to libloader.so, libmimalloc.so, libcrypto, libcurl, libEGL, libGLESv2, libxml2, libfreetype, libz, libsecret. Its main code segment ships encrypted (see note below) |
 | `sober_services` | 1.1 MB | C++ | GUI services app. Uses libadwaita (GTK4) + WebKitGTK for login/authentication flow. Handles cookie management, auth tokens, Roblox URI scheme handling |
 | `libloader.so` | 2.8 MB | Rust | Process spawner and environment setup. Forks/execs the Roblox process, sets up chroot/sandbox, loads libbadcpu.so via LD_PRELOAD style injection, handles /proc/self/maps |
 | `libbadcpu.so` | 376 KB | Rust | x86 64 CPU feature emulation. Catches SIGILL (illegal instruction) for missing CPU features (AVX, etc) and emulates them in software. Acts as a signal handler based JIT translator |
@@ -20,7 +20,7 @@ Sober consists of 4 main proprietary binaries distributed via Flatpak:
 ### How It Works (High Level)
 
 1. **sober_services** launches first. Its a C++ GTK4/libadwaita app with a WebKit webview that shows the Roblox login page. It handles OAuth authentication, stores cookies via libsoup, and passes auth tokens to the main `sober` binary via IPC
-2. **sober** is the core runtime. Written in Rust, it translates the Android ARM64 Roblox binary to run natively on x86 64 Linux. It uses:
+2. **sober** is the core runtime. It is a C++ binary (the readable dynamic symbols are C++ operator new/delete, and there are no Rust markers anywhere in the strings; the bulk of its code segment is encrypted so it can't be read directly). It translates the Android ARM64 Roblox binary to run natively on x86 64 Linux. It uses:
    - libEGL/libGLESv2 for GPU rendering (translating Android OpenGL ES calls to desktop Vulkan/OpenGL)
    - libcurl for network operations (connecting to Roblox servers, downloading assets)
    - libxml2 for parsing Android manifest/XML resources
@@ -45,7 +45,7 @@ Sober consists of 4 main proprietary binaries distributed via Flatpak:
 
 ### Key Findings from Reverse Engineering
 
-- **No telemetry or spyware**: The privacy notice accurately describes their data collection. The binary does not contain hidden tracking, keyloggers, or data exfiltration beyond what is documented
+- **No telemetry or spyware found at the string level**: nothing in the readable strings points to hidden tracking or data exfiltration (no analytics/crash-reporter SDKs or domains; the only external-service reference is the disclosed ipinfo.io opt-in). This is not a full audit though: `sober`'s code segment is encrypted, so its exact network endpoints aren't visible without unpacking, and no dynamic analysis was done here
 - **No Roblox IP redistribution**: Sober downloads the Roblox APK from Google Play on the users behalf. It does not redistribute Roblox code
 - **libstanpreg.so**: References to this shared object in libloader suggest it patches or replaces a standard Android library
 - **Android translation layer**: The main `sober` binary contains what appears to be a full Android compatibility layer, translating ARM native code, Android syscalls, and Android framework APIs to Linux equivalents
@@ -57,6 +57,8 @@ Sober consists of 4 main proprietary binaries distributed via Flatpak:
 - **mcl/oaknut**: ARM64 assembler/emitter library by merryhime. Used for generating or translating ARM64 instructions
 - **nlohmann/json**: JSON parser used in sober_services for configuration and IPC
 - **fmt**: C++ formatting library used in sober_services
+
+> Note on the `sober` bundled libraries: detex, volk, imgui, dyncall and mcl/oaknut are listed in Sober's own third-party attribution (see below), but they are **not** visible as strings in the shipped `sober` binary because its code+rodata is encrypted. Treat those five as "declared in the attribution", not as observed in the binary. SDL3 and mimalloc **are** confirmed from the binary (SDL3 driver manifests in the readable rodata; mimalloc ships as a separate `libmimalloc.so`). nlohmann/json and fmt are confirmed in the un-encrypted `sober_services`.
 
 ## Third Party Licenses
 
